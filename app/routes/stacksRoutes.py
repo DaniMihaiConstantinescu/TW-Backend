@@ -17,4 +17,4 @@ def addStack():
 
 @post_blueprint.route('/stack', methods=['GET'])
 def hello():
-    print("HEllo")
+    return jsonify({'message': 'Hello'})
