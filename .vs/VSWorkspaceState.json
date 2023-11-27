@@ -1,7 +1,9 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\TW2_BACKEND",
+    "\\TW2_BACKEND\\routes"
   ],
-  "SelectedNode": "\\C:\\Users\\Daniel\\Source\\Repos\\TW2-Backend",
+  "SelectedNode": "\\TW2_BACKEND\\routes\\stackRoutes.py",
   "PreviewInSolutionExplorer": false
 }
