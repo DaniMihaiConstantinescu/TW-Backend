@@ -1,7 +1,10 @@
 # myapp/routes/post_routes.py
 from asyncio.windows_events import NULL
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
 from datetime import datetime
+
+import random
+
 
 stack_blueprint = Blueprint('post', __name__)
 
@@ -66,36 +69,46 @@ db = firebase.database()
 def addStack():
     data = request.get_json()
 
-    uid = data['uid']
+    uid = data['userAPIKey']
     stack_name = data['name']
-    stack_color = data['color']
-    stack_id = data['stackId']        #received from frontend?
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    content_received = data['content']
+    stack_color = generate_random_color()
+    stack_id = generate_incremental_id()
+    stack_createdAt = data['createdAt']
+    nodes = data['nodes']
     
-    content = []
+    nodes = []
     #retreive data from content
-    for item in content_received:
+    for item in nodes:
         content_item = {}
 
         content_item['type'] = item["type"]
         content_item['title'] = item["title"]
-        content_item['createdAt'] = current_date
-        content_item['text'] = item["text"];
-
-        if item["type"] == "image":
+        content_item['description'] = item["description"];
+        content_item['createdAt'] = item["createdAt"]
+        
+        #Handle all types of nodes
+        if item["type"] == "StackBoard.Picture":
             content_item['url'] = item['url']
-        elif item["type"] == "text":
-            a = 6
-        elif item["type"] == "graph":
+        elif item["type"] == "StackBoard.Message":
+            pass # Messages doesn have other fields
+        elif item["type"] == "StackBoard.Graph":
             content_item['xLabel'] = item['xLabel']
             content_item['yLabel'] = item['yLabel']
             content_item['keyFrames'] = item['keyFrames']
-
-        content.append(content_item)
+        elif item["type"] == "StackBoard.Checkpoint":
+            content_item['serializedModel'] = item['serializedModel']
+            content_item['performanceIndex'] = item['performanceIndex']
+        elif item["type"] == "StackBoard.Table":
+            content_item['keyFrames'] = item['keyFrames']
+        nodes.append(content_item)
 
     #store data
-    db.child(uid).child("stacks").child(stack_id).set({'name' : stack_name,'color' : stack_color,'content' : content})
+    db.child(uid).child("stacks").child(stack_id).set({'name' : stack_name,'color' : stack_color,'nodes' : nodes})
+
+     # Return a valid response
+    response_data = {'status': 'success', 'stack_id': stack_id}
+    return make_response(jsonify(response_data), 200)
+
 
 #To be done if required
 @stack_blueprint.route('/image/add', methods=['POST'])
@@ -139,3 +152,24 @@ def getAllStacks(userAPIKey):
 @stack_blueprint.route('/stack/<id>', methods=['GET'])
 def get_stack(id):
     return jsonify({'message': id})
+
+
+
+
+def generate_incremental_id():
+    # Retrieve the current maximum ID from the database
+    max_id = db.child('max_id').get().val() or 0
+    
+    # Increment the ID
+    new_id = max_id + 1
+
+    # Update the max_id in the database for the next use
+    db.child('max_id').set(new_id)
+
+    return new_id
+
+
+def generate_random_color():
+    # Generate a random color in hexadecimal format
+    color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+    return color
