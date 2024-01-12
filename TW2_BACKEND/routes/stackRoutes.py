@@ -25,120 +25,48 @@ firebase = pyrebase.initialize_app(firebaseConfig)
 
 db = firebase.database()
 
-#Store a stack in database
-#Request data format:
 
-#{"uid" : "cipriAPI", 
-#        "stackId" : "2",
-#        "name": "Stack 1",
-#        "color": "#21AA27",
-#        "content": [
-#            {
-#                "type": "text",
-#                "title": "Title",
-#                "createdAt": "2023-07-13",
-#                "text": "Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis eligendi unde dicta quos? Delectus a facilis placeat architecto quasi praesentium minus magni, nemo molestias numquam tempore adipisci vitae dicta voluptate dolorem fugiat maxime, autem voluptates distinctio. Tenetur non rem adipisci cum voluptates maxime praesentium voluptate. Quasi hic ut sit culpa!",
-#            },
-#            {
-#                "type": "image",
-#                "title": "Image name",
-#                "createdAt": "2023-07-13",
-#                "text": "Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis eligendi unde dicta quos? Delectus a facilis placeat architecto quasi praesentium minus magni, nemo molestias numquam tempore adipisci vitae dicta voluptate dolorem fugiat maxime, autem voluptates distinctio.",
-#                "url": "https://analysisfunction.civilservice.gov.uk/wp-content/uploads/2022/12/pie-bar.svg"
-#            },
-#            {
-#                "type":"graph",
-#                "title": "Graph Title",
-#                "createdAt": "2023-07-13",
-#                "text": "Lorem ipsum dolor sit amet consectetur adipisicing elit. Veritatis eligendi unde dicta quos? Delectus a facilis placeat architecto quasi praesentium minus magni, nemo molestias numquam tempore adipisci vitae dicta voluptate dolorem fugiat maxime, autem voluptates distinctio.",
-#                "xLabel": "Label1",
-#                "yLabel": "Label2",
-#                "keyFrames": [
-#                  { "x": 10, "y": 20 },
-#                  { "x": 30, "y": 40 },
-#                  { "x": 50, "y": 70 },
-#                  { "x": 70, "y": 90 },
-#                  { "x": 100, "y": 110 },
-#                  { "x": 120, "y": 130 },
-#                  { "x": 140, "y": 170 },
-#                ]
-#              }
-#        ]
-#}
 @stack_blueprint.route('/stack/add', methods=['POST'])
 def addStack():
     data = request.get_json()
 
     uid = data['userAPIKey']
-    stack_name = data['name']
-    stack_color = generate_random_color()
     stack_id = generate_incremental_id()
+    stack_name = data['name']
+    stack_color = data['color']   
     stack_createdAt = data['createdAt']
     nodes = data['nodes']
-    
-    nodes = []
-    #retreive data from content
-    for item in nodes:
-        content_item = {}
-
-        content_item['type'] = item["type"]
-        content_item['title'] = item["title"]
-        content_item['description'] = item["description"];
-        content_item['createdAt'] = item["createdAt"]
-        
-        #Handle all types of nodes
-        if item["type"] == "StackBoard.Picture":
-            content_item['url'] = item['url']
-        elif item["type"] == "StackBoard.Message":
-            pass # Messages doesn have other fields
-        elif item["type"] == "StackBoard.Graph":
-            content_item['xLabel'] = item['xLabel']
-            content_item['yLabel'] = item['yLabel']
-            content_item['keyFrames'] = item['keyFrames']
-        elif item["type"] == "StackBoard.Checkpoint":
-            content_item['serializedModel'] = item['serializedModel']
-            content_item['performanceIndex'] = item['performanceIndex']
-        elif item["type"] == "StackBoard.Table":
-            content_item['keyFrames'] = item['keyFrames']
-        nodes.append(content_item)
 
     #store data
-    db.child(uid).child("stacks").child(stack_id).set({'name' : stack_name,'color' : stack_color,'nodes' : nodes})
+    db.child(uid).child("stacks").child(stack_id).set({'id': stack_id, 'name' : stack_name, 'color' : stack_color, 'nodes' : nodes})
 
      # Return a valid response
     response_data = {'status': 'success', 'stack_id': stack_id}
     return make_response(jsonify(response_data), 200)
 
 
-#To be done if required
-@stack_blueprint.route('/image/add', methods=['POST'])
-def addImage():
+@stack_blueprint.route('/stack/<userAPIKey>/<stackId>', methods=['POST'])
+def addNodeToStack(userAPIKey, stackId):
     data = request.get_json()
 
-    uid = data['uid']
-    image_data = data['image']
-    stack_id = image_data['stackId']
-    name = image_data['name']
-    description = image_data['description']
-    file_link = image_data['file']
-    data_type = "image"
-    current_date = datetime.now().strftime("%Y-%m-%d")
-
-    db_data = db.child(uid);
+    uid = userAPIKey
+    stack_id = stackId
     
-    #suppose the user already have at least a stack stored as he/she s present in the database
-    if db_data:                                     #stack_id calculated from frontend
-        user_stack = db_data.child("stacks").child(1)
-        #already have the stack
-        if user_stack:
-            content = user_stack.child("content").get().val()
-            content.append({"type" : "data_type","title" : "name","createdAt" : "current_date","text" : "description","url" : "file_link"})
-            db.child("raduAPI").child("stacks").child(1).update({"content" : content})
+    # Reference to the 'stacks' child for the specific user and stack
+    stack_ref = db.reference(f'{uid}/stacks/{stack_id}')
+
+    # Push the new node data to the 'nodes' child under a unique key
+    stack_ref.child("nodes").push(data).key
+
+    # Return a valid response
+    response_data = {'status': 'success'}
+    return make_response(jsonify(response_data), 200)
+
 
 #Return all data from a certain stack 
 #   @param stackId      
 #   @param userAPIKey   
-@stack_blueprint.route('/all_data_from_stack/<userAPIKey>/<stackId>', methods=['GET'])
+@stack_blueprint.route('/stack/<userAPIKey>/<stackId>', methods=['GET'])
 def getAllDataFromStack(userAPIKey, stackId):
     return jsonify(db.child(userAPIKey).child("stacks").child(stackId).get().val())
 
@@ -153,7 +81,16 @@ def getAllStacks(userAPIKey):
 def get_stack(id):
     return jsonify({'message': id})
 
+# Return number of users stacks
+@stack_blueprint.route('/stack/<userAPIKey>', methods=['GET'])
+def getStacksNumber(userAPIKey):
+    user_stacks = db.child(userAPIKey).child("stacks").get().val()
 
+    if user_stacks is not None:
+        number_of_stacks = len(user_stacks)
+        return jsonify({'stacksNumber': number_of_stacks})
+    else:
+        return jsonify({'stacksNumber': 0})
 
 
 def generate_incremental_id():
@@ -167,9 +104,3 @@ def generate_incremental_id():
     db.child('max_id').set(new_id)
 
     return new_id
-
-
-def generate_random_color():
-    # Generate a random color in hexadecimal format
-    color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
-    return color
