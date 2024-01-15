@@ -4,7 +4,8 @@ from flask import Blueprint, request, jsonify, make_response
 from datetime import datetime
 
 import random
-
+from pyasn1_modules.rfc5208 import ub_country_name_numeric_length
+from datetime import datetime
 
 stack_blueprint = Blueprint('post', __name__)
 
@@ -25,9 +26,44 @@ firebase = pyrebase.initialize_app(firebaseConfig)
 
 db = firebase.database()
 
+@stack_blueprint.route('/stack/getid', methods=['GET'])
+def generateId():
+    new_id = generate_incremental_id()
+    return jsonify({"id": new_id})
+
+@stack_blueprint.route('/stack/<userAPIKey>/<name>/<color>', methods = ['GET'])
+def createStackFromFrontEnd(userAPIKey, name, color):
+    uid = userAPIKey
+    stack_id = generate_incremental_id()
+    stack_name = name
+    stack_color = color  
+    stack_createdAt = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    nodes = []
+
+    db.child(uid).child("stacks").child(stack_id).set({'id': stack_id, 'name' : stack_name, 'color' : stack_color, 'nodes' : nodes})
+    
+    # response_data = {'status': 'success', 'stack_id': stack_id}
+    # return make_response(jsonify(response_data), 200)
+
 
 @stack_blueprint.route('/stack/add', methods=['POST'])
 def addStack():
+    data = request.get_json()
+
+    uid = data['userAPIKey']
+    stack_id = data['id']
+    stack_name = data['name']
+    stack_color = data['color']
+    stack_createdAt = data['createdAt']
+    nodes = data['nodes']
+
+    db.child(uid).child("stacks").child(stack_id).set({'id': stack_id, 'name': stack_name, 'color': stack_color, 'nodes': nodes})
+
+    response_data = {'status': 'success', 'stack_id': stack_id}
+    return make_response(jsonify(response_data), 200)
+
+@stack_blueprint.route('/stack/new', methods=['POST'])
+def addNewStack():
     data = request.get_json()
 
     uid = data['userAPIKey']
@@ -37,30 +73,39 @@ def addStack():
     stack_createdAt = data['createdAt']
     nodes = data['nodes']
 
-    #store data
-    db.child(uid).child("stacks").child(stack_id).set({'id': stack_id, 'name' : stack_name, 'color' : stack_color, 'nodes' : nodes})
 
-     # Return a valid response
+    db.child(uid).child("stacks").child(stack_id).set({'id': stack_id, 'name' : stack_name, 'color' : stack_color, 'nodes' : nodes})
+    
     response_data = {'status': 'success', 'stack_id': stack_id}
     return make_response(jsonify(response_data), 200)
 
+@stack_blueprint.route('/stack/count/<userAPIKey>', methods=['GET'])
+def getStacksCount(userAPIKey):
+    user_stacks = db.child(userAPIKey).child("stacks").get().val()
+
+    if user_stacks is not None:
+        number_of_stacks = len(user_stacks)
+        return jsonify({'stacksNumber': number_of_stacks})
+    else:
+        return jsonify({'stacksNumber': 0}) 
 
 @stack_blueprint.route('/stack/<userAPIKey>/<stackId>', methods=['POST'])
 def addNodeToStack(userAPIKey, stackId):
-    data = request.get_json()
-
-    uid = userAPIKey
-    stack_id = stackId
+    data = request.get_json()   
     
-    # Reference to the 'stacks' child for the specific user and stack
-    stack_ref = db.reference(f'{uid}/stacks/{stack_id}')
+    stack_ref = db.child(userAPIKey).child("stacks").child(stackId)
+    nodes_ref = stack_ref.child("nodes")
+    existing_nodes = nodes_ref.get().val()
+    
+    if existing_nodes is None:
+        existing_nodes = {}
 
-    # Push the new node data to the 'nodes' child under a unique key
-    stack_ref.child("nodes").push(data).key
+    new_node_id = str(len(existing_nodes))
+    db.child(userAPIKey).child("stacks").child(stackId).child("nodes").child(new_node_id).set(data)
 
-    # Return a valid response
     response_data = {'status': 'success'}
     return make_response(jsonify(response_data), 200)
+
 
 
 #Return all data from a certain stack 
@@ -80,17 +125,6 @@ def getAllStacks(userAPIKey):
 @stack_blueprint.route('/stack/<id>', methods=['GET'])
 def get_stack(id):
     return jsonify({'message': id})
-
-# Return number of users stacks
-@stack_blueprint.route('/stack/<userAPIKey>', methods=['GET'])
-def getStacksNumber(userAPIKey):
-    user_stacks = db.child(userAPIKey).child("stacks").get().val()
-
-    if user_stacks is not None:
-        number_of_stacks = len(user_stacks)
-        return jsonify({'stacksNumber': number_of_stacks})
-    else:
-        return jsonify({'stacksNumber': 0})
 
 
 def generate_incremental_id():
